@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Mis Turnos - DASPU",
+  "version": "1.0",
+  "permissions": ["storage"],
+  "host_permissions": ["https://turnos.daspu.com.ar/*"],
+  "action": {
+    "default_popup": "index.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://turnos.daspu.com.ar/*"],
+      "js": ["src/content/content.ts"],
+      "run_at": "document_end"
+    }
+  ]
+}

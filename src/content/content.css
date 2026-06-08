@@ -1,0 +1,44 @@
+.daspu-extension-wrapper {
+    box-sizing: border-box;
+}
+
+.daspu-extension-wrapper .toggle-row {
+    margin: 15px 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.daspu-extension-wrapper .label-selector {
+    margin: 0 !important;
+    line-height: 20px !important;
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.daspu-extension-wrapper .btn-toggle-switch {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 20px !important;
+    width: 40px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    cursor: pointer;
+}
+
+.daspu-extension-wrapper .items-grid-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.daspu-extension-wrapper .grid-col {
+    flex: 1 1 300px;
+    max-width: 100%;
+}

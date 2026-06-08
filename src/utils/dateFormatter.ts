@@ -2,10 +2,10 @@
  * Parses a local date-time string from the DOM and converts it to an ISO 8601 UTC string.
  * @param localDateTimeStr - Raw date string from DOM (e.g., "15/06/2026 19:30")
  */
-export function parseLocalDateTimeToISO(localDateTimeStr: string): string | null {
+export function parseLocalDateTimeToISO(localDateTimeStr: string): string {
     const numbers = localDateTimeStr.match(/\d+/g);
     
-    if (!numbers || numbers.length < 5) return null;
+    if (!numbers || numbers.length < 5) return '';
     const [day, month, year, hours, minutes] = numbers.map(Number);
     
     const localNativeDate = new Date(year, month - 1, day, hours, minutes);

@@ -2,21 +2,26 @@
   <div class="popup-container">
     <h2>Mis próximos Turnos de Daspu:</h2>
 
-    <div id="listaTurnos">
+    <div v-if="turnos" id="listaTurnos">
       <div v-for="turno in turnos" :key="turno.id" class="turno-card">
-        <div class="fecha-header">{{ formatearFecha(turno.fecha) }}</div>
-        <div>{{ turno.especialidad }}</div>
-        
+        <div class="fecha-header">{{ formatISODateToLocalDateString(turno.fechaTurnoUTC) }}</div>
+        <div style="margin-bottom: 4px;"><strong>{{ turno.servicio }}</strong></div>
+        <div style="color: #2c3e50;">{{ turno.prestador }}</div>
+        <div style="color: #7f8c8d; font-size: 11px; margin-top: 4px;">Sede: {{ turno.ubicacion }}</div>
+        <div style="color: #7f8c8d; font-size: 11px;">Email: {{ turno.email }}</div>
+
         <div class="estado-container">
-          <span :class="['estado', turno.confirmado ? 'confirmado' : '']">
-            {{ turno.confirmado ? 'Confirmado' : 'Pendiente' }}
+          <span class="estado" :class="{
+            'pendiente': turno.estado === AppointmentStates.Pending,
+            'confirmado': turno.estado === AppointmentStates.Confirmed
+          }">
+            {{ turno.estado === AppointmentStates.Confirmed ? 'CONFIRMADO' : 'PENDIENTE DE CONFIRMACION' }}
           </span>
-          
-          <a v-if="!turno.confirmado" :href="turno.urlAnular" class="btn-anular">
-            Anular
-          </a>
         </div>
       </div>
+    </div>
+    <div v-else>
+      <div style="text-align:center; color:#a4b0be; padding:20px; font-style:italic;">No hay turnos registrados</div>
     </div>
   </div>
 </template>
@@ -24,26 +29,35 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { onMounted } from 'vue';
+import { formatISODateToLocalDateString } from '../utils/dateFormatter';
+import { AppointmentStates } from '../models/AppointmentStates';
+import type Appointment from '../models/Appointment';
+import './Popup.css'
 // import { usePatientStore } from '../store/usePatientStore';
 
 // const patientStore = usePatientStore();
 
 onMounted(() => {
-    // When popup opens, we hydrate the list with real DB data.
-
-    //patientStore.cargarDatos();
+  getTurnos();
 });
 
-// Aquí luego conectaremos con tu Pinia Store
-const turnos = ref([
-  { id: 1, fecha: '2026-06-15', especialidad: 'Odontología', confirmado: true, urlAnular: '#' },
-  { id: 2, fecha: '2026-06-20', especialidad: 'Clínica Médica', confirmado: false, urlAnular: '#' }
-]);
+const turnos = ref<Appointment[]>([]);
 
-const formatearFecha = (fecha: string) => {
-  // Aquí llamarás a tu función de utils/dateFormatter.ts
-  return new Date(fecha).toLocaleDateString();
+const getTurnos = () => {
+  chrome.storage.local.get({ turnos: [] }, (result: { turnos: Appointment[] }) => {
+    const curatedData = result.turnos.map((turno) => {
+      return {
+        ...turno,
+        id: turno.id || crypto.randomUUID()
+      }
+    })
+
+    if (JSON.stringify(curatedData) !== JSON.stringify(result.turnos)) {
+      chrome.storage.local.set({ turnos: curatedData });
+    }
+
+    turnos.value = curatedData.filter(x => x.estado !== AppointmentStates.Canceled);
+  })
 };
-
 
 </script>

@@ -1,6 +1,14 @@
-.popup-container {
+html, body, #app {
+  margin: 0;
+  padding: 0;
   width: 400px;
   height: 600px;
+  overflow: hidden; /* Bloquea el scroll externo del navegador */
+}
+
+.popup-container {
+  width: 100%;  
+  height: 100%; /* Ahora sí hereda los 600px reales a través de #app */
   padding: 16px 16px 0px 16px;
   background-color: #f5f6fa;
   font-family: system-ui, sans-serif;
@@ -62,11 +70,16 @@ h2 {
 .estado {
   font-size: 12px;
   font-weight: bold;
-  color: #d35400;
   text-transform: uppercase;
 }
 
-.estado.confirmado { color: #1e7e34; }
+.estado.pendiente {
+  color: #d35400;
+}
+
+.estado.confirmado { 
+  color: #1e7e34; 
+}
 
 .btn-anular {
   display: inline-block;
