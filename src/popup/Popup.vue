@@ -2,6 +2,46 @@
   <div class="popup-container">
     <h2>Mis próximos Turnos de Daspu:</h2>
 
+    <!-- Google Login Section -->
+    <div class="auth-section">
+      <div v-if="!authStore.isAuthenticated" class="auth-login">
+        <button 
+          @click="handleLogin" 
+          :disabled="authStore.isLoading"
+          class="btn-google-login"
+        >
+          <span v-if="authStore.isLoading">Iniciando sesión...</span>
+          <!-- <span v-else>🔐 Iniciar sesión con Google</span> -->
+           <span v-else class="google-auth-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="18px" height="18px" class="google-icon">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.5 24c0-1.65-.15-3.22-.42-4.75H24v9h12.75c-.55 2.92-2.2 5.39-4.68 7.05l7.27 5.64C43.59 36.64 46.5 30.9 46.5 24z"/>
+              <path fill="#FBBC05" d="M10.54 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.98-6.19z"/>
+              <path fill="#34A853" d="M24 38.5c-6.26 0-11.57-4.22-13.46-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48c6.48 0 11.93-2.13 15.89-5.81l-7.27-5.64c-2.11 1.42-4.81 2.45-8.62 2.45z"/>
+            </svg>
+            <span>Iniciar sesión con Google</span>
+          </span>
+        </button>
+      </div>
+      
+      <div v-else class="auth-info">
+        <div class="user-info">
+          <img v-if="authStore.user?.picture" :src="authStore.user.picture" :alt="authStore.user.name" class="user-avatar" />
+          <div class="user-details">
+            <div class="user-name">{{ authStore.user?.name }}</div>
+            <div class="user-email">{{ authStore.user?.email }}</div>
+          </div>
+        </div>
+        <button 
+          @click="handleLogout" 
+          :disabled="authStore.isLoading"
+          class="btn-logout"
+        >
+          {{ authStore.isLoading ? 'Cerrando...' : 'Cerrar sesión' }}
+        </button>
+      </div>
+    </div>
+
     <!-- Tab Navigation -->
     <div class="tabs-nav">
       <button 
@@ -77,10 +117,12 @@ import { onMounted } from 'vue';
 import { formatISODateToLocalDateString } from '../utils/dateFormatter';
 import { AppointmentStates } from '../models/AppointmentStates';
 import type Appointment from '../models/Appointment';
+import { useAuthStore } from '../store/useAuthStore';
 import './Popup.css'
 
 const activeTab = ref<'activos' | 'anulados'>('activos');
 const allTurnos = ref<Appointment[]>([]);
+const authStore = useAuthStore();
 
 const activosTurnos = computed(() => 
   allTurnos.value.filter(turno => 
@@ -92,7 +134,8 @@ const anuladosTurnos = computed(() =>
   allTurnos.value.filter(turno => turno.estado === AppointmentStates.Canceled)
 );
 
-onMounted(() => {
+onMounted(async () => {
+  await authStore.initializeAuth();
   getTurnos();
 });
 
@@ -111,6 +154,17 @@ const getTurnos = () => {
 
     allTurnos.value = curatedData;
   })
+};
+
+const handleLogin = async () => {
+  const success = await authStore.login();
+  if (success) {
+    console.log('Login successful! User sub:', authStore.user?.sub);
+  }
+};
+
+const handleLogout = async () => {
+  await authStore.logout();
 };
 
 </script>

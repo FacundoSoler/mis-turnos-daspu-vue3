@@ -2,8 +2,16 @@
   "manifest_version": 3,
   "name": "Mis Turnos - DASPU",
   "version": "1.0",
-  "permissions": ["storage"],
+  "permissions": ["storage", "identity"],
   "host_permissions": ["https://turnos.daspu.com.ar/*"],
+  "oauth2": {
+    "client_id": "476337446556-63u34hj54qh50canpnfcgc10k8m2d68c.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "openid"
+    ]
+  },
   "action": {
     "default_popup": "index.html"
   },

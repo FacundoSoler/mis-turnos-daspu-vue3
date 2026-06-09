@@ -1,4 +1,7 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 import Popup from './Popup.vue'
 
-createApp(Popup).mount('#app')
+const app = createApp(Popup)
+app.use(createPinia())
+app.mount('#app')
