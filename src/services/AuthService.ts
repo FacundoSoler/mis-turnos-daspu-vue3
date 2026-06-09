@@ -48,12 +48,36 @@ const AuthService = {
     /**
      * Exchange access token for ID token and user info
      * Chrome's identity API doesn't directly return ID tokens, so we fetch user info from Google API
+     * Handles 401 errors by removing cached token and retrying with fresh token
      */
-    fetchUserInfo: async (accessToken: string): Promise<UserInfo | null> => {
+    fetchUserInfo: async (accessToken: string, retryCount: number = 0): Promise<UserInfo | null> => {
         try {
             const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
+
+            // Handle 401 Unauthorized - token might be expired or invalid
+            if (response.status === 401 && retryCount === 0) {
+                console.warn('AuthService: Token unauthorized (401), clearing cache and retrying...');
+                
+                // Remove the invalid token from Chrome's cache
+                await new Promise<void>((resolve) => {
+                    chrome.identity.removeCachedAuthToken({ token: accessToken }, () => {
+                        console.log('AuthService: Invalid token removed from cache');
+                        resolve();
+                    });
+                });
+
+                // Get a fresh token
+                const freshToken = await AuthService.getGoogleIdToken();
+                if (!freshToken) {
+                    console.error('AuthService: Failed to get fresh token');
+                    return null;
+                }
+
+                // Retry fetchUserInfo with fresh token (only once to avoid infinite loop)
+                return AuthService.fetchUserInfo(freshToken, 1);
+            }
 
             if (!response.ok) {
                 console.error('AuthService: Failed to fetch user info:', response.statusText);
@@ -106,19 +130,35 @@ const AuthService = {
     },
 
     /**
-     * Logout user
+     * Logout user - properly revokes and clears cached token
      */
     logout: async (): Promise<void> => {
         try {
-            // Get current token and revoke it
-            chrome.identity.getAuthToken({ interactive: false }, (result: any) => {
-                if (result) {
-                    fetch(`https://accounts.google.com/o/oauth2/revoke?token=${result}`);
+            // Get the stored auth state to access the token
+            const authState = await AuthService.getStoredAuthState();
+            const token = authState.token;
+
+            // Remove cached token from Chrome's identity API
+            if (token) {
+                await new Promise<void>((resolve) => {
+                    chrome.identity.removeCachedAuthToken({ token }, () => {
+                        console.log('AuthService: Cached token removed');
+                        resolve();
+                    });
+                });
+
+                // Attempt to revoke the token with Google
+                try {
+                    await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`);
+                    console.log('AuthService: Token revoked with Google');
+                } catch (revokeError) {
+                    console.warn('AuthService: Token revocation failed (non-critical):', revokeError);
                 }
-                // Clear stored auth state
-                chrome.storage.local.remove('authState');
-                console.log('AuthService: Logout successful');
-            });
+            }
+
+            // Clear stored auth state
+            chrome.storage.local.remove('authState');
+            console.log('AuthService: Logout successful');
         } catch (error) {
             console.error('AuthService: Logout error:', error);
         }
@@ -131,6 +171,9 @@ const AuthService = {
         return new Promise((resolve) => {
             chrome.storage.local.get('authState', (result) => {
                 const authState = result.authState as AuthState | undefined;
+                if (authState && authState.token) {
+                    console.log('AuthService: Restored auth state from storage');
+                }
                 resolve(
                     authState || {
                         user: null,

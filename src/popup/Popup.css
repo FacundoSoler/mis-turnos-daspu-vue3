@@ -40,6 +40,9 @@ h2 {
 
 .btn-google-login {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 10px 16px;
   background-color: #4285f4;
   color: white;
@@ -60,6 +63,27 @@ h2 {
   cursor: not-allowed;
   opacity: 0.7;
 }
+
+/* --- CLASES DE ALINEACIÓN PARA LOGO Y TEXTO --- */
+.google-auth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  line-height: 1; 
+}
+
+.google-icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+.google-auth-btn > span {
+  display: inline-block;
+  transform: translateY(-0.5px); 
+}
+/* ---------------------------------------------- */
 
 .auth-info {
   display: flex;
@@ -127,7 +151,6 @@ h2 {
   cursor: not-allowed;
   opacity: 0.7;
 }
-
 
 .tabs-nav {
   display: flex;
