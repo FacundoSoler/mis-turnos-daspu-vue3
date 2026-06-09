@@ -17,19 +17,6 @@ html, body, #app {
   box-sizing: border-box;
 }
 
-#listaTurnos {
-  flex-grow: 1;
-  overflow-y: auto;
-  margin-top: 8px;
-  padding-bottom: 16px;
-  padding-right: 8px;
-}
-
-/* Scrollbar personalizada */
-#listaTurnos::-webkit-scrollbar { width: 6px; }
-#listaTurnos::-webkit-scrollbar-track { background: transparent; }
-#listaTurnos::-webkit-scrollbar-thumb { background-color: #444; border-radius: 4px; }
-
 h2 {
   font-size: 16px;
   color: #2c3e50;
@@ -39,6 +26,49 @@ h2 {
   padding-bottom: 6px;
 }
 
+/* Tab Navigation */
+.tabs-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid #dcdde1;
+}
+
+.tab-button {
+  padding: 8px 16px;
+  background-color: transparent;
+  border: none;
+  color: #7f8c8d;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  text-transform: uppercase;
+}
+
+.tab-button:hover {
+  color: #2c3e50;
+}
+
+.tab-button.active {
+  color: #2c3e50;
+  border-bottom-color: #2980b9;
+}
+
+#listaTurnos {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding-bottom: 16px;
+  padding-right: 8px;
+}
+
+/* Scrollbar personalizada */
+#listaTurnos::-webkit-scrollbar { width: 6px; }
+#listaTurnos::-webkit-scrollbar-track { background: transparent; }
+#listaTurnos::-webkit-scrollbar-thumb { background-color: #444; border-radius: 4px; }
+
 .turno-card {
   border: 1px solid #dcdde1;
   border-radius: 6px;
@@ -47,6 +77,11 @@ h2 {
   font-size: 13px;
   background: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.turno-card.anulado {
+  opacity: 0.7;
+  background-color: #f8f9fa;
 }
 
 .fecha-header {
@@ -79,6 +114,10 @@ h2 {
 
 .estado.confirmado { 
   color: #1e7e34; 
+}
+
+.estado.anulado {
+  color: #c0392b;
 }
 
 .btn-anular {
