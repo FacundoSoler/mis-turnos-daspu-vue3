@@ -118,11 +118,13 @@ import { formatISODateToLocalDateString } from '../utils/dateFormatter';
 import { AppointmentStates } from '../models/AppointmentStates';
 import type Appointment from '../models/Appointment';
 import { useAuthStore } from '../store/useAuthStore';
+import SupabaseService from '../services/SupabaseService';
 import './Popup.css'
 
 const activeTab = ref<'activos' | 'anulados'>('activos');
 const allTurnos = ref<Appointment[]>([]);
 const authStore = useAuthStore();
+const isSyncing = ref(false);
 
 const activosTurnos = computed(() => 
   allTurnos.value.filter(turno => 
@@ -135,6 +137,9 @@ const anuladosTurnos = computed(() =>
 );
 
 onMounted(async () => {
+  // Initialize Supabase
+  SupabaseService.initialize();
+  
   await authStore.initializeAuth();
   getTurnos();
 });
@@ -156,15 +161,80 @@ const getTurnos = () => {
   })
 };
 
+/**
+ * Sync all local appointments to Supabase on login
+ */
+const syncAllAppointmentsToSupabase = async (): Promise<void> => {
+  if (!authStore.isAuthenticated) {
+    console.warn('Popup: Cannot sync - user not authenticated');
+    return;
+  }
+
+  isSyncing.value = true;
+  try {
+    console.log('Popup: Starting sync of all appointments to Supabase...');
+    const syncedCount = await SupabaseService.syncAllAppointments(allTurnos.value);
+    console.log(`Popup: Synced ${syncedCount} appointments to Supabase`);
+  } catch (error) {
+    console.error('Popup: Error syncing appointments:', error);
+  } finally {
+    isSyncing.value = false;
+  }
+};
+
+/**
+ * Sync a single appointment to Supabase
+ */
+const syncAppointmentToSupabase = async (appointment: Appointment): Promise<void> => {
+  if (!authStore.isAuthenticated) return;
+
+  try {
+    await SupabaseService.syncAppointment(appointment);
+  } catch (error) {
+    console.error('Popup: Error syncing appointment to Supabase:', error);
+  }
+};
+
 const handleLogin = async () => {
   const success = await authStore.login();
   if (success) {
     console.log('Login successful! User sub:', authStore.user?.sub);
+    // Sync all appointments to Supabase on successful login
+    await syncAllAppointmentsToSupabase();
   }
 };
 
 const handleLogout = async () => {
   await authStore.logout();
 };
+
+// Listen for storage changes (when new appointments are created or updated)
+// This allows syncing when content script saves appointments
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.turnos && authStore.isAuthenticated) {
+    const newTurnos = changes.turnos.newValue as Appointment[];
+    const oldTurnos = changes.turnos.oldValue as Appointment[];
+
+    // Compare and find what changed
+    if (newTurnos && oldTurnos) {
+      newTurnos.forEach(newTurno => {
+        const oldTurno = oldTurnos.find(t => t.id === newTurno.id);
+        
+        if (!oldTurno) {
+          // New appointment created - sync it
+          console.log('Popup: New appointment detected, syncing to Supabase:', newTurno.servicio);
+          syncAppointmentToSupabase(newTurno);
+        } else if (JSON.stringify(oldTurno) !== JSON.stringify(newTurno)) {
+          // Appointment updated - sync it
+          console.log('Popup: Appointment updated, syncing to Supabase:', newTurno.servicio);
+          syncAppointmentToSupabase(newTurno);
+        }
+      });
+    }
+
+    // Refresh local UI
+    getTurnos();
+  }
+});
 
 </script>

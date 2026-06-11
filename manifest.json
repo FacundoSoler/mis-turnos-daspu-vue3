@@ -5,12 +5,16 @@
   "permissions": ["storage", "identity"],
   "host_permissions": ["https://turnos.daspu.com.ar/*"],
   "oauth2": {
-    "client_id": "476337446556-63u34hj54qh50canpnfcgc10k8m2d68c.apps.googleusercontent.com",
+    "client_id": "476337446556-m3emkf14dpsff669i56qiuj55ja755qh.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/userinfo.email",
       "https://www.googleapis.com/auth/userinfo.profile",
       "openid"
     ]
+  },
+  "supabase": {
+    "url": "https://zcrolqfyoapuyydxvkai.supabase.co",
+    "anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpjcm9scWZ5b2FwdXl5ZHh2a2FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MDg1NzMsImV4cCI6MjA5NjE4NDU3M30.WQ-KDBP6Fp911EDrMr6JZkVAGOBLx38lYred2uo3484"
   },
   "action": {
     "default_popup": "index.html"

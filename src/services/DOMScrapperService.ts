@@ -19,7 +19,7 @@ const DOMScrapperService = {
                 console.warn("Extension: Could not extract turnoId from page or URL.");
                 return;
             }
-            
+
             const normalizedPageText = pageText.replace(/\s+/g, ' ').toUpperCase();
 
             const result = await chrome.storage.local.get({ turnos: [] }) as { turnos: Appointment[] };
@@ -39,6 +39,7 @@ const DOMScrapperService = {
 
                 if (serviceMatches && providerMatches && dateMatches && timeMatches) {
                     storedAppointments[i].estado = AppointmentStates.Confirmed;
+                    storedAppointments[i].fechaUltimaModificacionUTC = new Date().toISOString();
                     storedAppointments[i].turnoId = parseInt(appointmentId);
                     chrome.storage.local.set({ turnos: storedAppointments });
                     return;
@@ -48,6 +49,62 @@ const DOMScrapperService = {
             console.warn("Extension: Success screen detected, but normalized data did not match any pending record.");
         } catch {
             console.warn("Extension: Timeout waiting for confirmation in the DOM.");
+        }
+    },
+    saveAppointment: async (email: string): Promise<void> => {
+        try {
+            const fechaCreacionTurnoUTC = new Date().toISOString();
+
+            const appointmentData: Appointment = {
+                id: crypto.randomUUID(),
+                fechaCreacionTurnoUTC: fechaCreacionTurnoUTC,
+                fechaUltimaModificacionUTC: fechaCreacionTurnoUTC,
+                fechaTurnoUTC: parseLocalDateTimeToISO(getElementText('turnoFechaHora')),
+                email: email,
+                celular: getInputValue('txtCelular'),
+                servicio: getElementText('turnoServicio'),
+                prestador: getElementText('turnoPrestador'),
+                ubicacion: getElementText('turnoUbicacion'),
+                observaciones: getInputValue('txtObservaciones'),
+                estado: AppointmentStates.Pending,
+                fichaPacienteId: parseInt(getInputValue('hdnFichaId')) || undefined,
+            };
+
+            const appointments = await chrome.storage.local.get({ turnos: [] }) as { turnos: Appointment[] };
+            const updatedAppointments = [...appointments.turnos, appointmentData];
+
+            // Save to local storage. This triggers chrome.storage.onChanged listener in popup.vue
+            // which will auto-sync to Supabase if user is logged in
+            chrome.storage.local.set({ turnos: updatedAppointments });
+        } catch (err) {
+            console.error("Error extracting data from modal:", err);
+        }
+    },
+    cancelAppointment: async (): Promise<void> => {
+        try {
+            const appointmentId = getInputValue('hdnTurnoId');
+            if (appointmentId) {
+                const turnoId = parseInt(appointmentId);
+                if (!isNaN(turnoId)) {
+                    await AppointmentService.updateAppointmentState(turnoId, AppointmentStates.Canceled);
+                } else {
+                    console.warn("Extension: Invalid turnoId format:", appointmentId);
+                }
+            }
+        } catch (error) {
+            console.error("Extension: Error nullifying appointment:", error);
+        }
+    },
+    verifyCanceledAppointment: async (): Promise<void> => {
+        try {
+            //const contentContainer = await waitForElement('#contentLoad') as HTMLElement;
+            const contentContainer = await waitForElement('#Notification') as HTMLElement;
+            if (contentContainer.innerText.includes("no existe o ya fue anulado")) {
+                const match = window.location.href.match(/TurnNullify\/(\d+)/);
+                if (match?.[1]) await AppointmentService.updateAppointmentState(parseInt(match[1]), AppointmentStates.Canceled);
+            }
+        } catch {
+            // Ignored; it means the appointment exists and the user must click "Anular"
         }
     },
     waitForBasicPatientInfoAndAutoComplete: () => {
@@ -68,7 +125,7 @@ const DOMScrapperService = {
             }
         }, 100);
     },
-    gestionarInyeccion: () => { // Seleccionar Todos toggle
+    injectSelectAlltoggle: () => { // Seleccionar Todos toggle
         limpiarInyeccionPrevia();
         detenerObservadorGrilla();
 
@@ -106,54 +163,6 @@ const DOMScrapperService = {
 
             await PatientService.savePatientRecordInStorage(patientRecordId, PatientRecord);
         }
-    },
-    saveAppointment: async (email: string): Promise<void> => {
-        try {
-            const appointmentData: Appointment = {
-                id: crypto.randomUUID(),
-                fechaCreacionTurnoUTC: new Date().toISOString(),
-                fechaTurnoUTC: parseLocalDateTimeToISO(getElementText('turnoFechaHora')),
-                email: email,
-                servicio: getElementText('turnoServicio'),
-                prestador: getElementText('turnoPrestador'),
-                ubicacion: getElementText('turnoUbicacion'),
-                observaciones: getInputValue('txtObservaciones'),
-                estado: AppointmentStates.Pending,
-            };
-
-            const appointments = await chrome.storage.local.get({ turnos: [] }) as { turnos: Appointment[] };
-            const updatedAppointments = [...appointments.turnos, appointmentData];
-            chrome.storage.local.set({ turnos: updatedAppointments });
-        } catch (err) {
-            console.error("Error extracting data from modal:", err);
-        }
-    },
-    verifyAppointmentNullified: async (): Promise<void> => {
-        try {
-            //const contentContainer = await waitForElement('#contentLoad') as HTMLElement;
-            const contentContainer = await waitForElement('#Notification') as HTMLElement;
-            if (contentContainer.innerText.includes("no existe o ya fue anulado")) {
-                const match = window.location.href.match(/TurnNullify\/(\d+)/);
-                if (match?.[1]) await AppointmentService.updateAppointmentState(parseInt(match[1]), AppointmentStates.Canceled);
-            }
-        } catch {
-            // Ignored; it means the appointment exists and the user must click "Anular"
-        }
-    },
-    nullifyAppointment: async (): Promise<void> => {
-        try {
-            const appointmentId = getInputValue('hdnTurnoId');
-            if (appointmentId) {
-                const turnoId = parseInt(appointmentId);
-                if (!isNaN(turnoId)) {
-                    await AppointmentService.updateAppointmentState(turnoId, AppointmentStates.Canceled);
-                } else {
-                    console.warn("Extension: Invalid turnoId format:", appointmentId);
-                }
-            }
-        } catch (error) {
-            console.error("Extension: Error nullifying appointment:", error);
-        }
     }
 }
 
@@ -187,13 +196,13 @@ const autoCompletePatientContactInfo = async (): Promise<void> => {
     const patientRecordId = getInputValue('hdnFichaId');
     if (!patientRecordId) return;
 
-    const pacienteGuardado = await PatientService.getByPatientRecordId(patientRecordId);
-    if (!pacienteGuardado) return;
+    const storedPatientRecord = await PatientService.getByPatientRecordId(patientRecordId);
+    if (!storedPatientRecord) return;
 
-    setInputAndDispatch('txtTelefono', pacienteGuardado.telefono);
-    setInputAndDispatch('txtCodArea', pacienteGuardado.codArea);
-    setInputAndDispatch('txtCelular', pacienteGuardado.celular);
-    setInputAndDispatch('txtEmail', pacienteGuardado.email);
+    setInputAndDispatch('txtTelefono', storedPatientRecord.telefono);
+    setInputAndDispatch('txtCodArea', storedPatientRecord.codArea);
+    setInputAndDispatch('txtCelular', storedPatientRecord.celular);
+    setInputAndDispatch('txtEmail', storedPatientRecord.email);
 
     autoCompleteDropdownObraSocial();
 }
@@ -229,10 +238,8 @@ const evaluarPresenciaDeToggle = (filaOriginal: HTMLElement) => {
 
     if (hayTurnos && !toggleExiste) {
         filaOriginal.after(createToggleSeleccionarTodos());
-        console.log("DASPU Helper: Turnos detectados. Toggle inyectado.");
     } else if (!hayTurnos && toggleExiste) {
         limpiarInyeccionPrevia();
-        console.log("DASPU Helper: La grilla se vació. Toggle removido.");
     }
 }
 

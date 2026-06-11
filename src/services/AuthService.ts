@@ -1,5 +1,7 @@
+import SupabaseService from './SupabaseService';
+
 interface UserInfo {
-    sub: string;           // Google's unique identifier
+    sub: string;
     email: string;
     name: string;
     picture?: string;
@@ -11,108 +13,127 @@ interface AuthState {
     isLoggedIn: boolean;
 }
 
+let nonce = '';
+
 const AuthService = {
     /**
-     * Decode JWT token (base64 decode without verification for client-side use)
-     * In production, verify the token signature on backend
+     * Decode JWT token to extract user info directly from the token payload
      */
     decodeJwt: (token: string): Record<string, any> | null => {
         try {
             const parts = token.split('.');
             if (parts.length !== 3) return null;
 
-            const decoded = atob(parts[1]);
-            return JSON.parse(decoded);
+            // Decodificar Base64 de forma segura en el navegador
+            const base64Url = parts[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+
+            return JSON.parse(jsonPayload);
         } catch (error) {
             console.error('AuthService: Error decoding JWT:', error);
             return null;
         }
     },
-
-    /**
-     * Get Google ID token and extract user info
-     */
+    getGoogleClientId: (): string | undefined => {
+        const manifest = chrome.runtime.getManifest();
+        return manifest.oauth2?.client_id;
+    },
     getGoogleIdToken: async (): Promise<string | null> => {
-        return new Promise((resolve) => {
-            chrome.identity.getAuthToken({ interactive: true }, (result: any) => {
-                if (chrome.runtime.lastError) {
-                    console.error('AuthService: Error getting auth token:', chrome.runtime.lastError);
-                    resolve(null);
-                } else {
-                    resolve(result || null);
+        console.log('AuthService: Requesting id_token via WebAuthFlow...');
+
+        const googleClientId = AuthService.getGoogleClientId();
+        
+        if (!googleClientId) {
+            console.error('AuthService: No se pudo leer el client_id del manifest.json');
+            return null;
+        }
+
+        const redirectUrl = chrome.identity.getRedirectURL();
+        console.log("EL URL QUE TENÉS QUE COPIAR EN GOOGLE ES:", redirectUrl);
+
+        nonce = crypto.randomUUID();
+        const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+        authUrl.searchParams.append('client_id', googleClientId);
+        authUrl.searchParams.append('response_type', 'id_token');
+        authUrl.searchParams.append('scope', 'openid email profile');
+        authUrl.searchParams.append('redirect_uri', redirectUrl);
+        authUrl.searchParams.append('nonce', nonce);
+        authUrl.searchParams.append('prompt', 'select_account'); // Fuerza a mostrar el selector de cuentas
+
+        return new Promise<string | null>((resolve) => {
+            chrome.identity.launchWebAuthFlow(
+                { url: authUrl.toString(), interactive: true },
+                (responseUrl: string | undefined) => {
+                    if (chrome.runtime.lastError || !responseUrl) {
+                        console.error('AuthService: launchWebAuthFlow error:', chrome.runtime.lastError);
+                        resolve(null);
+                        return;
+                    }
+
+                    try {
+                        const url = new URL(responseUrl);
+                        const idToken = url.hash.split('id_token=')[1]?.split('&')[0];
+
+                        if (idToken) {
+                            resolve(idToken);
+                        } else {
+                            console.error('AuthService: id_token not found in response payload');
+                            resolve(null);
+                        }
+                    } catch (error) {
+                        console.error('AuthService: Error parsing id_token from response:', error);
+                        resolve(null);
+                    }
                 }
-            });
+            );
         });
     },
 
     /**
-     * Exchange access token for ID token and user info
-     * Chrome's identity API doesn't directly return ID tokens, so we fetch user info from Google API
-     * Handles 401 errors by removing cached token and retrying with fresh token
-     */
-    fetchUserInfo: async (accessToken: string, retryCount: number = 0): Promise<UserInfo | null> => {
-        try {
-            const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-
-            // Handle 401 Unauthorized - token might be expired or invalid
-            if (response.status === 401 && retryCount === 0) {
-                console.warn('AuthService: Token unauthorized (401), clearing cache and retrying...');
-                
-                // Remove the invalid token from Chrome's cache
-                await new Promise<void>((resolve) => {
-                    chrome.identity.removeCachedAuthToken({ token: accessToken }, () => {
-                        console.log('AuthService: Invalid token removed from cache');
-                        resolve();
-                    });
-                });
-
-                // Get a fresh token
-                const freshToken = await AuthService.getGoogleIdToken();
-                if (!freshToken) {
-                    console.error('AuthService: Failed to get fresh token');
-                    return null;
-                }
-
-                // Retry fetchUserInfo with fresh token (only once to avoid infinite loop)
-                return AuthService.fetchUserInfo(freshToken, 1);
-            }
-
-            if (!response.ok) {
-                console.error('AuthService: Failed to fetch user info:', response.statusText);
-                return null;
-            }
-
-            const data = await response.json();
-            
-            // Log the 'id' field (which is Google's unique identifier equivalent to 'sub')
-            console.log('Google User ID (sub equivalent):', data.id);
-
-            return {
-                sub: data.id,
-                email: data.email,
-                name: data.name,
-                picture: data.picture
-            };
-        } catch (error) {
-            console.error('AuthService: Error fetching user info:', error);
-            return null;
-        }
-    },
-
-    /**
-     * Login with Google
+     * Login with Google -> Decode Token -> Authenticate Supabase
      */
     login: async (): Promise<UserInfo | null> => {
         try {
+            // 1. Obtener el JWT puro
             const token = await AuthService.getGoogleIdToken();
             if (!token) return null;
 
-            const userInfo = await AuthService.fetchUserInfo(token);
-            if (!userInfo) return null;
+            // 2. Extraer los datos del usuario directamente del token (Sin pegarle a la API)
+            const decodedToken = AuthService.decodeJwt(token);
+            if (!decodedToken) return null;
 
-            // Store in chrome.storage for persistence across popup reopens
+            const userInfo: UserInfo = {
+                sub: decodedToken.sub,
+                email: decodedToken.email,
+                name: decodedToken.name,
+                picture: decodedToken.picture
+            };
+
+            // 3. Autenticar Supabase con el JWT
+            try {
+                const supabaseClient = SupabaseService.getClient();
+
+                const { error: authError } = await supabaseClient.auth.signInWithIdToken({
+                    provider: 'google',
+                    token: token,
+                    nonce: nonce
+                });
+
+                if (authError) {
+                    console.error('AuthService: Could not authenticate with Supabase:', authError.message);
+                    return null; // Bloqueamos el login local si Supabase lo rechaza
+                }
+
+                console.log('AuthService: Supabase client authenticated successfully');
+            } catch (supabaseAuthError) {
+                console.error('AuthService: Error setting up Supabase auth:', supabaseAuthError);
+                return null;
+            }
+
+            // 4. Guardar sesión
             const authState: AuthState = {
                 user: userInfo,
                 token: token,
@@ -120,7 +141,7 @@ const AuthService = {
             };
 
             await chrome.storage.local.set({ authState });
-            console.log('AuthService: Login successful. User:', userInfo.name, 'Sub:', userInfo.sub);
+            console.log('AuthService: Login successful. User:', userInfo.name);
 
             return userInfo;
         } catch (error) {
@@ -130,33 +151,20 @@ const AuthService = {
     },
 
     /**
-     * Logout user - properly revokes and clears cached token
+     * Logout user - Clears Supabase session and local storage
      */
     logout: async (): Promise<void> => {
         try {
-            // Get the stored auth state to access the token
-            const authState = await AuthService.getStoredAuthState();
-            const token = authState.token;
-
-            // Remove cached token from Chrome's identity API
-            if (token) {
-                await new Promise<void>((resolve) => {
-                    chrome.identity.removeCachedAuthToken({ token }, () => {
-                        console.log('AuthService: Cached token removed');
-                        resolve();
-                    });
-                });
-
-                // Attempt to revoke the token with Google
-                try {
-                    await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`);
-                    console.log('AuthService: Token revoked with Google');
-                } catch (revokeError) {
-                    console.warn('AuthService: Token revocation failed (non-critical):', revokeError);
-                }
+            // Desconectar Supabase
+            try {
+                const supabaseClient = SupabaseService.getClient();
+                await supabaseClient.auth.signOut();
+                console.log('AuthService: Signed out from Supabase');
+            } catch (supabaseError) {
+                console.warn('AuthService: Error signing out from Supabase:', supabaseError);
             }
 
-            // Clear stored auth state
+            // Limpiar caché local de la extensión
             chrome.storage.local.remove('authState');
             console.log('AuthService: Logout successful');
         } catch (error) {
@@ -165,15 +173,12 @@ const AuthService = {
     },
 
     /**
-     * Get stored auth state (without making new API calls)
+     * Get stored auth state
      */
     getStoredAuthState: async (): Promise<AuthState> => {
         return new Promise((resolve) => {
             chrome.storage.local.get('authState', (result) => {
                 const authState = result.authState as AuthState | undefined;
-                if (authState && authState.token) {
-                    console.log('AuthService: Restored auth state from storage');
-                }
                 resolve(
                     authState || {
                         user: null,

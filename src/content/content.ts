@@ -22,11 +22,11 @@ async function handleRouteChange(): Promise<void> {
 
     try {
         if (url.includes("Turn/TurnData")) {
-            DOMScrapperService.gestionarInyeccion();
+            DOMScrapperService.injectSelectAlltoggle();
         } else if (url.includes("Turn/TurnConfirmation")) {
             await DOMScrapperService.confirmAppointment(url);
         } else if (url.includes("Turn/TurnNullify")) {
-            await DOMScrapperService.verifyAppointmentNullified();
+            await DOMScrapperService.verifyCanceledAppointment();
         }
     } catch (error) {
         console.error("DASPU Router: Error al manejar la ruta:", error);
@@ -58,7 +58,7 @@ document.addEventListener('click', async (e: MouseEvent) => {
 
     // --- D. 'Anular' button (TurnNullify) ---
     if (target.closest('#btnAnular')) {
-        await DOMScrapperService.nullifyAppointment();
+        await DOMScrapperService.cancelAppointment();
     }
 }, true); // Use capture phase
 

@@ -10,9 +10,11 @@ const AppointmentService = {
 
         if (index !== -1) {
             storedAppointments[index].estado = newState;
+            storedAppointments[index].fechaUltimaModificacionUTC = new Date().toISOString();
             chrome.storage.local.set({ turnos: storedAppointments }, () => {
                 console.log(`Extension: Appointment ${appointmentId} updated to ${newState}`);
             });
+            // ⚠️ NOTE: Supabase sync is handled automatically by chrome.storage.onChanged listener in popup.vue
         }
     }
 }
